@@ -4,6 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zoom会議リアルタイム要約</title>
+    
+    <!-- セキュリティヘッダー対応 -->
+    <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
+    <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://appssdk.zoom.us; script-src 'self' 'unsafe-inline' https://appssdk.zoom.us; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.zoom.us">
+    
     <script src="https://appssdk.zoom.us/sdk.min.js"></script>
     <style>
         body {
@@ -52,6 +60,15 @@
             background: linear-gradient(45deg, #718096, #4a5568);
             color: white;
         }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
         .panel {
             background: white;
             border: 2px solid #e2e8f0;
@@ -67,11 +84,24 @@
             margin: 20px 0;
             background: #f8f9fa;
             border-left: 4px solid #667eea;
+            font-weight: bold;
+        }
+        .status.recording {
+            background: #fed7d7;
+            border-left-color: #f56565;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.8; }
+            100% { opacity: 1; }
         }
         .transcript-text {
             font-size: 16px;
             line-height: 1.6;
             white-space: pre-wrap;
+            max-height: 200px;
+            overflow-y: auto;
         }
         .summary-text {
             font-size: 14px;
@@ -79,6 +109,7 @@
             background: #f7fafc;
             padding: 15px;
             border-radius: 8px;
+            white-space: pre-wrap;
         }
         .claude-prompt {
             width: 100%;
@@ -88,6 +119,7 @@
             border-radius: 8px;
             font-family: monospace;
             font-size: 14px;
+            resize: vertical;
         }
         .copy-btn {
             background: #667eea;
@@ -97,9 +129,23 @@
             border-radius: 5px;
             cursor: pointer;
             margin-top: 10px;
+            transition: background 0.3s;
+        }
+        .copy-btn:hover {
+            background: #5a67d8;
         }
         .hidden {
             display: none;
+        }
+        .zoom-status {
+            background: #e6fffa;
+            border: 2px solid #38b2ac;
+            color: #234e52;
+        }
+        .error-status {
+            background: #fed7d7;
+            border: 2px solid #f56565;
+            color: #742a2a;
         }
     </style>
 </head>
@@ -108,7 +154,7 @@
         <h1>🎤 Zoom会議リアルタイム要約システム</h1>
         
         <div class="status" id="status">
-            ステータス: 待機中
+            ステータス: 初期化中...
         </div>
         
         <div class="controls">
@@ -131,7 +177,7 @@
             <h3>📋 Claude用プロンプト</h3>
             <textarea class="claude-prompt" id="claudePrompt" readonly></textarea>
             <button class="copy-btn" onclick="copyPrompt()">📋 コピー</button>
-            <p style="color:#666; font-size:14px;">
+            <p style="color:#666; font-size:14px; margin-top:10px;">
                 👆 このプロンプトをClaude MAXに貼り付けて要約を取得してください
             </p>
         </div>
@@ -155,19 +201,26 @@
                 });
                 
                 const meetingContext = await zoomSdk.getMeetingContext();
-                document.getElementById('status').textContent = 
-                    `ステータス: Zoom会議 "${meetingContext.meetingTopic || '会議'}" に接続済み`;
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = `ステータス: Zoom会議 "${meetingContext.meetingTopic || '会議'}" に接続済み`;
+                statusEl.className = 'status zoom-status';
+                
+                console.log('Zoom Apps SDK 初期化完了');
                 
             } catch (error) {
                 console.log('Zoom外での使用:', error);
-                document.getElementById('status').textContent = 'ステータス: Zoom外での使用（テストモード）';
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = 'ステータス: スタンドアロンモード（Zoom外での使用）';
+                statusEl.className = 'status';
             }
         }
         
         // 音声認識初期化
         function initSpeechRecognition() {
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                alert('このブラウザは音声認識に対応していません。Chrome または Edge をお使いください。');
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = 'エラー: このブラウザは音声認識に対応していません（Chrome/Edge推奨）';
+                statusEl.className = 'status error-status';
                 return false;
             }
             
@@ -179,7 +232,9 @@
             recognition.lang = 'ja-JP';
             
             recognition.onstart = function() {
-                document.getElementById('status').textContent = 'ステータス: 🔴 録音中...';
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = 'ステータス: 🔴 録音中... (音声を検出中)';
+                statusEl.className = 'status recording';
             };
             
             recognition.onresult = function(event) {
@@ -200,12 +255,19 @@
                     extractKeywords(transcriptBuffer);
                 }
                 
-                const currentText = transcriptBuffer + interimTranscript;
+                const currentText = transcriptBuffer + (interimTranscript ? `[${interimTranscript}]` : '');
                 document.getElementById('transcript').textContent = currentText;
             };
             
             recognition.onerror = function(event) {
                 console.error('音声認識エラー:', event.error);
+                if (event.error === 'no-speech') {
+                    console.log('音声が検出されませんでした');
+                } else {
+                    const statusEl = document.getElementById('status');
+                    statusEl.textContent = `エラー: 音声認識エラー (${event.error})`;
+                    statusEl.className = 'status error-status';
+                }
             };
             
             recognition.onend = function() {
@@ -214,7 +276,9 @@
                         if (isRecording) recognition.start();
                     }, 100);
                 } else {
-                    document.getElementById('status').textContent = 'ステータス: 停止';
+                    const statusEl = document.getElementById('status');
+                    statusEl.textContent = 'ステータス: 録音停止';
+                    statusEl.className = 'status';
                 }
             };
             
@@ -253,18 +317,21 @@
             document.getElementById('transcript').textContent = "音声認識を開始してください...";
             document.getElementById('summary').textContent = "キーワードはここに表示されます...";
             document.getElementById('claudePanel').classList.add('hidden');
-            document.getElementById('status').textContent = 'ステータス: 待機中';
+            
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = 'ステータス: 待機中';
+            statusEl.className = 'status';
         }
         
         // キーワード抽出
         function extractKeywords(text) {
             const keywords = [
-                '決定', '結論', '合意', '承認', '却下',
-                '次回', '期限', '締切', '予定', 'スケジュール',
-                '予算', '費用', '金額', '価格',
-                '責任者', '担当者', '担当', 'リーダー',
-                '課題', '問題', 'リスク', '懸念',
-                'アクション', 'TODO', 'やること', '宿題'
+                '決定', '結論', '合意', '承認', '却下', '採用',
+                '次回', '期限', '締切', '予定', 'スケジュール', '日程',
+                '予算', '費用', '金額', '価格', 'コスト',
+                '責任者', '担当者', '担当', 'リーダー', '主担当',
+                '課題', '問題', 'リスク', '懸念', '検討事項',
+                'アクション', 'TODO', 'やること', '宿題', 'タスク'
             ];
             
             let summary = '';
@@ -272,10 +339,10 @@
             
             keywords.forEach(keyword => {
                 if (text.includes(keyword)) {
-                    const sentences = text.split('。').filter(s => s.includes(keyword));
+                    const sentences = text.split(/[。！？]/).filter(s => s.includes(keyword) && s.trim().length > 5);
                     sentences.forEach(sentence => {
                         if (sentence.trim()) {
-                            summary += `• ${keyword}: ${sentence.trim()}。\n`;
+                            summary += `🔹 ${keyword}: ${sentence.trim()}。\n`;
                             found = true;
                         }
                     });
@@ -283,7 +350,7 @@
             });
             
             if (!found) {
-                summary = '重要なキーワードが見つかりませんでした';
+                summary = '重要なキーワードが見つかりませんでした。\n会話を続けてください...';
             }
             
             document.getElementById('summary').textContent = summary;
@@ -300,7 +367,10 @@ ${text}
 ・主な議論ポイント
 ・決定事項
 ・アクションアイテム（誰が何をいつまでに）
-・次回会議の予定`;
+・次回会議の予定
+
+【出力形式】
+見やすい箇条書きで、重要度順に整理してください。`;
 
             document.getElementById('claudePrompt').value = prompt;
             document.getElementById('claudePanel').classList.remove('hidden');
@@ -325,11 +395,21 @@ ${text}
         
         // 初期化
         window.onload = async function() {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = 'ステータス: 初期化中...';
+            
+            // Zoom SDK初期化
             await initializeZoomApp();
             
+            // 音声認識サポートチェック
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                document.getElementById('status').textContent = 'ステータス: 音声認識非対応ブラウザ';
+                statusEl.textContent = 'エラー: 音声認識非対応ブラウザ（Chrome/Edge推奨）';
+                statusEl.className = 'status error-status';
                 document.querySelector('.btn-start').disabled = true;
+            } else {
+                if (statusEl.textContent === 'ステータス: 初期化中...') {
+                    statusEl.textContent = 'ステータス: 準備完了';
+                }
             }
         };
     </script>
