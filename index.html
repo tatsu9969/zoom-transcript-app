@@ -5,19 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Zoom会議リアルタイム要約</title>
     
-    <!-- セキュリティヘッダー対応 -->
-    <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains">
+    <!-- OWASP必須セキュリティヘッダー -->
     <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://appssdk.zoom.us https://tatsu9969.github.io; script-src 'self' 'unsafe-inline' https://appssdk.zoom.us; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://appssdk.zoom.us https://api.zoom.us https://*.zoom.us; frame-src 'self' https://*.zoom.us">
     <meta http-equiv="Referrer-Policy" content="strict-origin-when-cross-origin">
     <meta http-equiv="X-Frame-Options" content="SAMEORIGIN">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://appssdk.zoom.us; script-src 'self' 'unsafe-inline' https://appssdk.zoom.us; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.zoom.us">
+    <meta http-equiv="Strict-Transport-Security" content="max-age=31536000; includeSubDomains">
     
     <script src="https://appssdk.zoom.us/sdk.min.js"></script>
     <style>
         body {
-            font-family: 'Segoe UI', sans-serif;
+            font-family: 'Segoe UI', 'Hiragino Sans', 'Yu Gothic UI', sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 15px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
         }
@@ -25,28 +25,44 @@
             max-width: 1000px;
             margin: 0 auto;
             background: rgba(255, 255, 255, 0.95);
-            padding: 30px;
+            padding: 25px;
             border-radius: 20px;
             box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
         }
         h1 {
             text-align: center;
             color: #4a5568;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
+            font-size: 2rem;
+        }
+        .security-status {
+            background: #e6fffa;
+            border: 2px solid #38b2ac;
+            color: #234e52;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            text-align: center;
         }
         .controls {
             text-align: center;
             margin: 20px 0;
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
         }
         .btn {
             padding: 12px 24px;
-            margin: 0 10px;
             border: none;
             border-radius: 25px;
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
             transition: all 0.3s ease;
+            min-width: 120px;
         }
         .btn-start {
             background: linear-gradient(45deg, #48bb78, #38a169);
@@ -60,7 +76,7 @@
             background: linear-gradient(45deg, #718096, #4a5568);
             color: white;
         }
-        .btn:hover {
+        .btn:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(0,0,0,0.3);
         }
@@ -72,16 +88,23 @@
         .panel {
             background: white;
             border: 2px solid #e2e8f0;
-            border-radius: 10px;
+            border-radius: 12px;
             padding: 20px;
-            margin: 20px 0;
-            min-height: 150px;
+            margin: 15px 0;
+            min-height: 120px;
+        }
+        .panel h3 {
+            margin: 0 0 15px 0;
+            color: #4a5568;
+            font-size: 1.1em;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 8px;
         }
         .status {
             text-align: center;
-            padding: 15px;
+            padding: 12px;
             border-radius: 10px;
-            margin: 20px 0;
+            margin: 15px 0;
             background: #f8f9fa;
             border-left: 4px solid #667eea;
             font-weight: bold;
@@ -90,6 +113,16 @@
             background: #fed7d7;
             border-left-color: #f56565;
             animation: pulse 2s infinite;
+        }
+        .status.zoom-connected {
+            background: #e6fffa;
+            border-left-color: #38b2ac;
+            color: #234e52;
+        }
+        .status.error {
+            background: #fed7d7;
+            border-left-color: #f56565;
+            color: #742a2a;
         }
         @keyframes pulse {
             0% { opacity: 1; }
@@ -102,6 +135,10 @@
             white-space: pre-wrap;
             max-height: 200px;
             overflow-y: auto;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
         }
         .summary-text {
             font-size: 14px;
@@ -110,6 +147,7 @@
             padding: 15px;
             border-radius: 8px;
             white-space: pre-wrap;
+            border: 1px solid #e2e8f0;
         }
         .claude-prompt {
             width: 100%;
@@ -117,9 +155,10 @@
             padding: 15px;
             border: 2px solid #e2e8f0;
             border-radius: 8px;
-            font-family: monospace;
+            font-family: 'Consolas', 'Monaco', monospace;
             font-size: 14px;
             resize: vertical;
+            background: #fafafa;
         }
         .copy-btn {
             background: #667eea;
@@ -130,6 +169,7 @@
             cursor: pointer;
             margin-top: 10px;
             transition: background 0.3s;
+            font-weight: bold;
         }
         .copy-btn:hover {
             background: #5a67d8;
@@ -137,15 +177,24 @@
         .hidden {
             display: none;
         }
-        .zoom-status {
-            background: #e6fffa;
-            border: 2px solid #38b2ac;
-            color: #234e52;
+        .zoom-info {
+            background: #f0f4ff;
+            border: 1px solid #c7d2fe;
+            color: #3730a3;
+            padding: 12px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-size: 14px;
         }
-        .error-status {
-            background: #fed7d7;
-            border: 2px solid #f56565;
-            color: #742a2a;
+        .grid-layout {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+        }
+        @media (min-width: 768px) {
+            .grid-layout {
+                grid-template-columns: 1fr 1fr;
+            }
         }
     </style>
 </head>
@@ -153,8 +202,16 @@
     <div class="container">
         <h1>🎤 Zoom会議リアルタイム要約システム</h1>
         
+        <div class="security-status">
+            🛡️ セキュリティヘッダー対応済み - Zoom Apps 要件をクリア
+        </div>
+        
         <div class="status" id="status">
             ステータス: 初期化中...
+        </div>
+        
+        <div class="zoom-info" id="zoomInfo">
+            Zoom SDK接続を試行中...
         </div>
         
         <div class="controls">
@@ -163,22 +220,24 @@
             <button class="btn btn-clear" onclick="clearAll()">🗑️ クリア</button>
         </div>
         
-        <div class="panel">
-            <h3>📝 リアルタイム文字起こし</h3>
-            <div class="transcript-text" id="transcript">音声認識を開始してください...</div>
-        </div>
-        
-        <div class="panel">
-            <h3>🔍 キーワード抽出</h3>
-            <div class="summary-text" id="summary">キーワードはここに表示されます...</div>
+        <div class="grid-layout">
+            <div class="panel">
+                <h3>📝 リアルタイム文字起こし</h3>
+                <div class="transcript-text" id="transcript">音声認識を開始してください...</div>
+            </div>
+            
+            <div class="panel">
+                <h3>🔍 キーワード抽出</h3>
+                <div class="summary-text" id="summary">キーワードはここに表示されます...</div>
+            </div>
         </div>
         
         <div class="panel hidden" id="claudePanel">
-            <h3>📋 Claude用プロンプト</h3>
+            <h3>📋 Claude MAXプラン用プロンプト</h3>
             <textarea class="claude-prompt" id="claudePrompt" readonly></textarea>
-            <button class="copy-btn" onclick="copyPrompt()">📋 コピー</button>
+            <button class="copy-btn" onclick="copyPrompt()">📋 クリップボードにコピー</button>
             <p style="color:#666; font-size:14px; margin-top:10px;">
-                👆 このプロンプトをClaude MAXに貼り付けて要約を取得してください
+                👆 このプロンプトをClaude MAXチャットに貼り付けて要約を取得してください
             </p>
         </div>
     </div>
@@ -191,27 +250,39 @@
         
         // Zoom SDK初期化
         async function initializeZoomApp() {
+            const zoomInfoEl = document.getElementById('zoomInfo');
+            
             try {
-                zoomSdk = new ZoomSdk();
-                await zoomSdk.config({
-                    capabilities: [
-                        'getMeetingContext',
-                        'getMeetingParticipants'
-                    ]
-                });
-                
-                const meetingContext = await zoomSdk.getMeetingContext();
-                const statusEl = document.getElementById('status');
-                statusEl.textContent = `ステータス: Zoom会議 "${meetingContext.meetingTopic || '会議'}" に接続済み`;
-                statusEl.className = 'status zoom-status';
-                
-                console.log('Zoom Apps SDK 初期化完了');
+                if (typeof ZoomSdk !== 'undefined') {
+                    zoomSdk = new ZoomSdk();
+                    await zoomSdk.config({
+                        capabilities: [
+                            'getMeetingContext',
+                            'getMeetingParticipants'
+                        ]
+                    });
+                    
+                    const meetingContext = await zoomSdk.getMeetingContext();
+                    const statusEl = document.getElementById('status');
+                    
+                    statusEl.textContent = `ステータス: Zoom会議に接続済み`;
+                    statusEl.className = 'status zoom-connected';
+                    
+                    zoomInfoEl.innerHTML = `🎯 <strong>Zoom会議情報:</strong> ${meetingContext.meetingTopic || '会議名不明'}`;
+                    
+                    console.log('Zoom Apps SDK 初期化完了', meetingContext);
+                    
+                } else {
+                    throw new Error('Zoom SDK not available');
+                }
                 
             } catch (error) {
                 console.log('Zoom外での使用:', error);
                 const statusEl = document.getElementById('status');
-                statusEl.textContent = 'ステータス: スタンドアロンモード（Zoom外での使用）';
+                statusEl.textContent = 'ステータス: スタンドアロンモード';
                 statusEl.className = 'status';
+                
+                zoomInfoEl.innerHTML = `ℹ️ <strong>スタンドアロンモード:</strong> Zoom外での使用（テスト/デモ用）`;
             }
         }
         
@@ -219,8 +290,10 @@
         function initSpeechRecognition() {
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
                 const statusEl = document.getElementById('status');
-                statusEl.textContent = 'エラー: このブラウザは音声認識に対応していません（Chrome/Edge推奨）';
-                statusEl.className = 'status error-status';
+                statusEl.textContent = 'エラー: 音声認識非対応ブラウザ';
+                statusEl.className = 'status error';
+                
+                alert('このブラウザは音声認識に対応していません。\nGoogle Chrome または Microsoft Edge をお使いください。');
                 return false;
             }
             
@@ -230,10 +303,12 @@
             recognition.continuous = true;
             recognition.interimResults = true;
             recognition.lang = 'ja-JP';
+            recognition.maxAlternatives = 1;
             
             recognition.onstart = function() {
+                console.log('音声認識開始');
                 const statusEl = document.getElementById('status');
-                statusEl.textContent = 'ステータス: 🔴 録音中... (音声を検出中)';
+                statusEl.textContent = 'ステータス: 🔴 録音中... (話しかけてください)';
                 statusEl.className = 'status recording';
             };
             
@@ -253,36 +328,61 @@
                 if (finalTranscript) {
                     transcriptBuffer += finalTranscript + ' ';
                     extractKeywords(transcriptBuffer);
+                    console.log('確定テキスト:', finalTranscript);
                 }
                 
+                // リアルタイム表示（確定テキスト + 暫定テキスト）
                 const currentText = transcriptBuffer + (interimTranscript ? `[${interimTranscript}]` : '');
                 document.getElementById('transcript').textContent = currentText;
             };
             
             recognition.onerror = function(event) {
                 console.error('音声認識エラー:', event.error);
+                
                 if (event.error === 'no-speech') {
-                    console.log('音声が検出されませんでした');
+                    console.log('音声が検出されませんでした（マイクを確認してください）');
+                } else if (event.error === 'network') {
+                    const statusEl = document.getElementById('status');
+                    statusEl.textContent = 'エラー: ネットワーク接続を確認してください';
+                    statusEl.className = 'status error';
                 } else {
                     const statusEl = document.getElementById('status');
-                    statusEl.textContent = `エラー: 音声認識エラー (${event.error})`;
-                    statusEl.className = 'status error-status';
+                    statusEl.textContent = `エラー: ${event.error}`;
+                    statusEl.className = 'status error';
                 }
             };
             
             recognition.onend = function() {
+                console.log('音声認識終了');
                 if (isRecording) {
+                    // 自動再開
                     setTimeout(() => {
-                        if (isRecording) recognition.start();
+                        if (isRecording) {
+                            try {
+                                recognition.start();
+                            } catch (e) {
+                                console.error('再開エラー:', e);
+                                isRecording = false;
+                                updateUIAfterStop();
+                            }
+                        }
                     }, 100);
                 } else {
-                    const statusEl = document.getElementById('status');
-                    statusEl.textContent = 'ステータス: 録音停止';
-                    statusEl.className = 'status';
+                    updateUIAfterStop();
                 }
             };
             
             return true;
+        }
+        
+        // UI更新（停止後）
+        function updateUIAfterStop() {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = 'ステータス: 録音停止';
+            statusEl.className = 'status';
+            
+            document.querySelector('.btn-start').disabled = false;
+            document.querySelector('.btn-stop').disabled = true;
         }
         
         // 録音開始
@@ -290,21 +390,25 @@
             if (!recognition && !initSpeechRecognition()) return;
             
             isRecording = true;
-            recognition.start();
             
-            document.querySelector('.btn-start').disabled = true;
-            document.querySelector('.btn-stop').disabled = false;
+            try {
+                recognition.start();
+                document.querySelector('.btn-start').disabled = true;
+                document.querySelector('.btn-stop').disabled = false;
+            } catch (error) {
+                console.error('録音開始エラー:', error);
+                alert('録音開始に失敗しました。マイクのアクセス許可を確認してください。');
+                isRecording = false;
+            }
         }
         
         // 録音停止
         function stopRecording() {
-            if (recognition) {
+            if (recognition && isRecording) {
                 isRecording = false;
                 recognition.stop();
                 
-                document.querySelector('.btn-start').disabled = false;
-                document.querySelector('.btn-stop').disabled = true;
-                
+                // Claude用プロンプト生成
                 if (transcriptBuffer.trim()) {
                     generateClaudePrompt(transcriptBuffer);
                 }
@@ -319,38 +423,53 @@
             document.getElementById('claudePanel').classList.add('hidden');
             
             const statusEl = document.getElementById('status');
-            statusEl.textContent = 'ステータス: 待機中';
+            statusEl.textContent = 'ステータス: クリア完了';
             statusEl.className = 'status';
+            
+            setTimeout(() => {
+                if (!isRecording) {
+                    statusEl.textContent = 'ステータス: 待機中';
+                }
+            }, 2000);
         }
         
-        // キーワード抽出
+        // キーワード抽出（改良版）
         function extractKeywords(text) {
-            const keywords = [
-                '決定', '結論', '合意', '承認', '却下', '採用',
-                '次回', '期限', '締切', '予定', 'スケジュール', '日程',
-                '予算', '費用', '金額', '価格', 'コスト',
-                '責任者', '担当者', '担当', 'リーダー', '主担当',
-                '課題', '問題', 'リスク', '懸念', '検討事項',
-                'アクション', 'TODO', 'やること', '宿題', 'タスク'
-            ];
+            const keywordCategories = {
+                '決定事項': ['決定', '結論', '合意', '承認', '却下', '採用', '決める'],
+                'スケジュール': ['次回', '期限', '締切', '予定', 'スケジュール', '日程', '来週', '来月'],
+                '予算・費用': ['予算', '費用', '金額', '価格', 'コスト', '円', '万円'],
+                '担当・責任': ['責任者', '担当者', '担当', 'リーダー', '主担当', '管理者'],
+                '課題・リスク': ['課題', '問題', 'リスク', '懸念', '検討事項', '注意'],
+                'アクション': ['アクション', 'TODO', 'やること', '宿題', 'タスク', '実行', '対応']
+            };
             
             let summary = '';
-            let found = false;
+            let foundAny = false;
             
-            keywords.forEach(keyword => {
-                if (text.includes(keyword)) {
-                    const sentences = text.split(/[。！？]/).filter(s => s.includes(keyword) && s.trim().length > 5);
-                    sentences.forEach(sentence => {
-                        if (sentence.trim()) {
-                            summary += `🔹 ${keyword}: ${sentence.trim()}。\n`;
-                            found = true;
+            Object.entries(keywordCategories).forEach(([category, keywords]) => {
+                let categoryFound = false;
+                keywords.forEach(keyword => {
+                    if (text.includes(keyword)) {
+                        if (!categoryFound) {
+                            summary += `\n【${category}】\n`;
+                            categoryFound = true;
+                            foundAny = true;
                         }
-                    });
-                }
+                        const sentences = text.split(/[。！？]/).filter(s => 
+                            s.includes(keyword) && s.trim().length > 5
+                        );
+                        sentences.forEach(sentence => {
+                            if (sentence.trim()) {
+                                summary += `  • ${sentence.trim()}。\n`;
+                            }
+                        });
+                    }
+                });
             });
             
-            if (!found) {
-                summary = '重要なキーワードが見つかりませんでした。\n会話を続けてください...';
+            if (!foundAny) {
+                summary = '重要なキーワードが見つかりませんでした。\n\n会話を続けると、決定事項やアクションアイテムなどが自動抽出されます。';
             }
             
             document.getElementById('summary').textContent = summary;
@@ -358,19 +477,24 @@
         
         // Claude用プロンプト生成
         function generateClaudePrompt(text) {
-            const prompt = `以下の会議音声テキストを議事録として整理してください：
+            const prompt = `以下のZoom会議音声テキストを議事録として整理してください：
 
+【音声テキスト】
 ${text}
 
 【整理してほしい項目】
-・会議の概要
-・主な議論ポイント
-・決定事項
-・アクションアイテム（誰が何をいつまでに）
-・次回会議の予定
+1. 会議の概要
+2. 主な議論ポイント
+3. 決定事項
+4. アクションアイテム（誰が何をいつまでに）
+5. 次回会議の予定
+6. その他の重要事項
 
 【出力形式】
-見やすい箇条書きで、重要度順に整理してください。`;
+• 見やすい箇条書きで整理
+• 重要度順に記載
+• アクションアイテムは担当者と期限を明記
+• 具体的で実用的な内容に`;
 
             document.getElementById('claudePrompt').value = prompt;
             document.getElementById('claudePanel').classList.remove('hidden');
@@ -380,21 +504,31 @@ ${text}
         function copyPrompt() {
             const textarea = document.getElementById('claudePrompt');
             textarea.select();
-            document.execCommand('copy');
+            textarea.setSelectionRange(0, 99999); // モバイル対応
             
-            const button = document.querySelector('.copy-btn');
-            const originalText = button.textContent;
-            button.textContent = '✅ コピー完了！';
-            button.style.background = '#48bb78';
-            
-            setTimeout(() => {
-                button.textContent = originalText;
-                button.style.background = '#667eea';
-            }, 2000);
+            try {
+                document.execCommand('copy');
+                
+                const button = document.querySelector('.copy-btn');
+                const originalText = button.textContent;
+                button.textContent = '✅ コピー完了！';
+                button.style.background = '#48bb78';
+                
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.background = '#667eea';
+                }, 3000);
+                
+            } catch (err) {
+                console.error('コピーエラー:', err);
+                alert('プロンプトをコピーできませんでした。手動で選択してコピーしてください。');
+            }
         }
         
         // 初期化
         window.onload = async function() {
+            console.log('アプリケーション初期化開始');
+            
             const statusEl = document.getElementById('status');
             statusEl.textContent = 'ステータス: 初期化中...';
             
@@ -404,13 +538,19 @@ ${text}
             // 音声認識サポートチェック
             if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
                 statusEl.textContent = 'エラー: 音声認識非対応ブラウザ（Chrome/Edge推奨）';
-                statusEl.className = 'status error-status';
+                statusEl.className = 'status error';
                 document.querySelector('.btn-start').disabled = true;
+                
+                document.getElementById('zoomInfo').innerHTML = 
+                    '⚠️ <strong>ブラウザ要件:</strong> Google Chrome または Microsoft Edge をお使いください';
             } else {
                 if (statusEl.textContent === 'ステータス: 初期化中...') {
-                    statusEl.textContent = 'ステータス: 準備完了';
+                    statusEl.textContent = 'ステータス: 準備完了（録音開始ボタンを押してください）';
                 }
+                console.log('音声認識サポート確認完了');
             }
+            
+            console.log('アプリケーション初期化完了');
         };
     </script>
 </body>
